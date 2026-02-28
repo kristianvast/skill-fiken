@@ -244,8 +244,9 @@ curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accounts?page=0&pa
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {code, name}'
 
 # Account balances at a specific date
+# NOTE: The nested `account` object may have null code/name — always use top-level fields
 curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accountBalances?date=2026-01-31&page=0&pageSize=100" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {code, balance}'
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {code, name, balance}'
 ```
 
 ### 9. Inbox (Document Upload)
