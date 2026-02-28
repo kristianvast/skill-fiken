@@ -59,8 +59,10 @@ metadata:
   ```bash
   -H "Authorization: Bearer $FIKEN_API_TOKEN"
   -H "Content-Type: application/json"
+  -H "X-Request-ID: $(uuidgen)"
   ```
 - **RATE LIMITS (⚠️ IMPORTANT)**: Max 1 concurrent request. Max 4 requests/sec. Violation = 429 error or account ban. NEVER parallelize calls. Always wait for each response before sending next.
+- **Error responses**: `400` = bad request (missing field, wrong format). `401` = bad/expired token — verify `$FIKEN_API_TOKEN` is set. `403` = no access to this company — check token permissions. `429` = rate limited — wait a few seconds and retry. `404` = resource not found — verify company slug and resource ID.
 
 ## Norwegian Accounting Context
 
@@ -71,6 +73,7 @@ metadata:
   - `MEDIUM` = 15% (food/drink)
   - `LOW` = 12% (passenger transport, cinema)
   - `NONE` = 0% (exempt)
+  - Full VAT mapping table: https://api.fiken.no/api/v2/docs/ (see "VAT Code" section)
 - Common Norsk Standard Kontoplan codes:
   - `1920` = Bank (bank account)
   - `1500` = Kundefordringer (accounts receivable)
@@ -122,7 +125,7 @@ curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY" \
 
 ```bash
 # List contacts
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/contacts" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/contacts?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {contactId, name, email}'
 
 # Create contact (⚠️ REQUIRES CONFIRMATION)
@@ -134,12 +137,34 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/contacts" 
 
 ### 3. Invoices
 
-Note: Draft → Invoice → Sent → Paid
+**⚠️ CRITICAL — Invoice payment status**: The `settled` field on the invoice object is a **date** field that may be `null` even when the invoice IS fully paid. **Never** use `invoice.settled` alone to determine payment status. Instead, always check the linked sale object:
+
+- `invoice.sale.settled` — **boolean**, true if paid
+- `invoice.sale.settledDate` — date when settled
+- `invoice.sale.outstandingBalance` — **integer (øre)**, `0` = fully paid (most reliable field)
+
+Lifecycle: Draft → Invoice → Sent → Paid
 
 ```bash
-# List invoices
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {invoiceId, issueDate, dueDate, net, settled}'
+# List invoices (with correct payment status)
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices?page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '[.[] | {invoiceNumber, issueDate, dueDate, gross, paid: .sale.settled, paidDate: .sale.settledDate, outstanding: .sale.outstandingBalance, customer: .customer.name}]'
+
+# List UNPAID invoices only
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices?settled=false&page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '[.[] | {invoiceNumber, dueDate, gross, outstanding: .sale.outstandingBalance, customer: .customer.name}]'
+
+# List OVERDUE unpaid invoices (due before today)
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices?settled=false&dueDateLt=$(date +%Y-%m-%d)&page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '[.[] | {invoiceNumber, dueDate, gross, outstanding: .sale.outstandingBalance, customer: .customer.name}]'
+
+# Get single invoice details (with payment status)
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices/{invoiceId}" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '{invoiceNumber, issueDate, dueDate, net, gross, paid: .sale.settled, paidDate: .sale.settledDate, outstanding: .sale.outstandingBalance, customer: .customer.name}'
 
 # Create invoice draft (⚠️ REQUIRES CONFIRMATION)
 curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices/drafts" \
@@ -151,17 +176,13 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices/d
     "customerId": 12345,
     "lines": [{"netPrice": 100000, "vatType": "HIGH", "description": "Consulting"}]
   }'
-
-# Get invoice details
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/invoices/{invoiceId}" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '{invoiceId, issueDate, dueDate, net, gross, settled}'
 ```
 
 ### 4. Products
 
 ```bash
 # List products
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/products" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/products?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {productId, name, unitPrice}'
 
 # Create product (⚠️ REQUIRES CONFIRMATION)
@@ -174,9 +195,10 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/products" 
 ### 5. Sales
 
 ```bash
-# List sales
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/sales" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {saleId, date, totalPaid}'
+# List sales (with payment status)
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/sales?page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '.[] | {saleId, date, settled, settledDate, outstandingBalance}'
 
 # Create sale draft (⚠️ REQUIRES CONFIRMATION)
 curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/sales/drafts" \
@@ -191,9 +213,10 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/sales/draf
 ### 6. Purchases
 
 ```bash
-# List purchases
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/purchases" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {purchaseId, date, totalPaid}'
+# List purchases (with payment status)
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/purchases?page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '.[] | {purchaseId, date, paid, paymentDate}'
 
 # Create purchase draft (⚠️ REQUIRES CONFIRMATION)
 curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/purchases/drafts" \
@@ -209,7 +232,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/purchases/
 
 ```bash
 # List bank accounts
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/bankAccounts" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/bankAccounts?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {bankAccountId, name, accountCode}'
 ```
 
@@ -217,11 +240,11 @@ curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/bankAccounts" \
 
 ```bash
 # Chart of accounts
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accounts" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accounts?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {code, name}'
 
 # Account balances at a specific date
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accountBalances?date=2026-01-31" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accountBalances?date=2026-01-31&page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {code, balance}'
 ```
 
@@ -229,8 +252,8 @@ curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/accountBalances?da
 
 ```bash
 # List inbox documents
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/inbox" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {inboxDocumentId, name, createdDate}'
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/inbox?page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {inboxDocumentId, name, createdDate, status}'
 
 # Upload document to inbox (⚠️ REQUIRES CONFIRMATION)
 # Use multipart form — supports PDF, PNG, JPG
@@ -266,9 +289,10 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/purchases/
 Note: Full credit note = reverse entire invoice. Partial = reverse specific lines/amounts.
 
 ```bash
-# List credit notes
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/creditNotes" \
-  -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {creditNoteId, issueDate, net}'
+# List credit notes (with settlement status)
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/creditNotes?page=0&pageSize=100" \
+  -H "Authorization: Bearer $FIKEN_API_TOKEN" \
+  | jq '.[] | {creditNoteId, issueDate, net, settled: .sale.settled, outstanding: .sale.outstandingBalance}'
 
 # Create full credit note for an invoice (⚠️ REQUIRES CONFIRMATION)
 curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/creditNotes/full" \
@@ -287,7 +311,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/creditNote
 
 ```bash
 # List journal entries (posteringer)
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/journalEntries" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/journalEntries?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {journalEntryId, date, description}'
 
 # Create general journal entry / fri postering (⚠️ REQUIRES CONFIRMATION)
@@ -308,7 +332,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/generalJou
 
 ```bash
 # List all transactions
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/transactions" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/transactions?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {transactionId, date, description}'
 
 # Get specific transaction
@@ -324,7 +348,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/transactio
 
 ```bash
 # List projects
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/projects" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/projects?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {projectId, name, startDate, endDate}'
 
 # Create project (⚠️ REQUIRES CONFIRMATION)
@@ -338,7 +362,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/projects" 
 
 ```bash
 # List time entries
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/timeEntries" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/timeEntries?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {timeEntryId, date, hours, activityId}'
 
 # Create time entry (⚠️ REQUIRES CONFIRMATION)
@@ -362,7 +386,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/timeEntrie
 
 ```bash
 # List offers
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/offers" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/offers?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {offerId, date, net}'
 
 # Create offer draft (⚠️ REQUIRES CONFIRMATION)
@@ -385,7 +409,7 @@ curl -s -X POST "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/offers/dra
 
 ```bash
 # List order confirmations
-curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/orderConfirmations" \
+curl -s "https://api.fiken.no/api/v2/companies/$FIKEN_COMPANY/orderConfirmations?page=0&pageSize=100" \
   -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {confirmationId, date, net}'
 
 # Create order confirmation draft (⚠️ REQUIRES CONFIRMATION)
@@ -463,10 +487,7 @@ curl -s "https://api.fiken.no/api/v2/user" \
 
 ## Notes
 
-- **Pagination**: Add `?page=0&pageSize=100` to list endpoints. Max 100 per page. Response headers: `Fiken-Api-Page-Count` (total pages), `Fiken-Api-Result-Count` (total items).
+- **Pagination**: Default page size is **25** (not 100). Always add `?page=0&pageSize=100` to list endpoints to avoid silently missing data. Max 100 per page. Response headers: `Fiken-Api-Page-Count` (total pages), `Fiken-Api-Result-Count` (total items). If `Fiken-Api-Page-Count` > 1, you must paginate through all pages.
 - **Token security**: Store in env var only. Never paste `$FIKEN_API_TOKEN` as a literal string in commands or logs.
 - **Full API reference**: https://api.fiken.no/api/v2/docs/ — the interactive Swagger UI for exploring all endpoints and schemas.
-- **Invoice payment status**: The `settled` field on the invoice object itself may be `null` even when the invoice IS paid. Always check `invoice.sale.settled` (boolean), `invoice.sale.settledDate`, and `invoice.sale.outstandingBalance` for the actual payment status. Use this jq pattern for invoice overview:
-  ```bash
-  jq '[.[] | {invoiceNumber, issueDate, dueDate, gross, paid: .sale.settled, paidDate: .sale.settledDate, outstanding: .sale.outstandingBalance, customer: .customer.name}]'
-  ```
+- **Date filtering**: All date fields support range filters: `dateGe` (>=), `dateGt` (>), `dateLe` (<=), `dateLt` (<). Example: `?issueDateGe=2026-01-01&issueDateLe=2026-12-31`.
