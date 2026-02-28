@@ -492,3 +492,8 @@ curl -s "https://api.fiken.no/api/v2/user" \
 - **Token security**: Store in env var only. Never paste `$FIKEN_API_TOKEN` as a literal string in commands or logs.
 - **Full API reference**: https://api.fiken.no/api/v2/docs/ — the interactive Swagger UI for exploring all endpoints and schemas.
 - **Date filtering**: All date fields support range filters: `dateGe` (>=), `dateGt` (>), `dateLe` (<=), `dateLt` (<). Example: `?issueDateGe=2026-01-01&issueDateLe=2026-12-31`.
+- **Known API limitations** (must use Fiken UI instead):
+  - Cannot change the contact/customer on a posted sale or invoice — accounting integrity constraint
+  - Cannot edit lines on a finalized invoice — issue a credit note instead
+  - Cannot merge or split existing transactions
+  - If the user needs any of these, tell them directly: "This requires the Fiken UI — the API doesn't support modifying [X] on posted transactions."
