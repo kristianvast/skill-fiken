@@ -1,28 +1,27 @@
-# openclaw-skill-fiken
+# skill-fiken
 
-[Fiken](https://fiken.no) accounting API skill for [OpenClaw](https://github.com/openclaw/openclaw) — the multi-agent gateway.
+[Fiken](https://fiken.no) accounting API skill for AI agents.
 
-Gives your OpenClaw agent full access to the Fiken API v2: invoices, credit notes, contacts, purchases, sales, inbox (document upload), journal entries, projects, time tracking, offers, order confirmations, and more.
+Gives your AI agent full access to the Fiken API v2: invoices, credit notes, contacts, purchases, sales, inbox (document upload), journal entries, projects, time tracking, offers, order confirmations, and more.
 
 ## Install
 
-Copy the skill into your OpenClaw skills directory:
+Copy the skill into your project's skills directory:
 
 ```bash
-# From your OpenClaw project root
 mkdir -p skills/fiken
-curl -sL https://raw.githubusercontent.com/kristianvast/openclaw-skill-fiken/main/SKILL.md -o skills/fiken/SKILL.md
+curl -sL https://raw.githubusercontent.com/kristianvast/skill-fiken/main/SKILL.md -o skills/fiken/SKILL.md
 ```
 
 Or clone the whole repo:
 
 ```bash
-git clone https://github.com/kristianvast/openclaw-skill-fiken.git skills/fiken
+git clone https://github.com/kristianvast/skill-fiken.git skills/fiken
 ```
 
 ## Requirements
 
-- [OpenClaw](https://github.com/openclaw/openclaw) gateway running
+- An AI agent that supports skill files (e.g. [OpenCode](https://github.com/sst/opencode), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), or any skill-compatible gateway)
 - `curl` and `jq` installed
 - A [Fiken](https://fiken.no) account with the API module activated
 
@@ -40,13 +39,13 @@ One token gives access to all companies you have permissions for.
 
 ### 3. Set the environment variable
 
-Make `FIKEN_API_TOKEN` available to your OpenClaw gateway process:
+Make `FIKEN_API_TOKEN` available to your agent process:
 
 ```bash
 export FIKEN_API_TOKEN="your-token-here"
 ```
 
-For systemd-managed gateways, add to your service file:
+For systemd-managed services, add to your service file:
 
 ```ini
 Environment=FIKEN_API_TOKEN=your-token-here

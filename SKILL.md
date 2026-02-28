@@ -4,12 +4,9 @@ description: Full Fiken accounting API v2 — invoices, credit notes, contacts, 
 homepage: https://api.fiken.no/api/v2/docs/
 metadata:
   {
-    "openclaw":
-      {
-        "emoji": "💰",
-        "requires": { "bins": ["curl", "jq"], "env": ["FIKEN_API_TOKEN"] },
-        "primaryEnv": "FIKEN_API_TOKEN",
-      },
+    "emoji": "💰",
+    "requires": { "bins": ["curl", "jq"], "env": ["FIKEN_API_TOKEN"] },
+    "primaryEnv": "FIKEN_API_TOKEN"
   }
 ---
 
