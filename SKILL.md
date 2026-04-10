@@ -52,10 +52,11 @@ Read the relevant reference file BEFORE attempting complex operations (konsernbi
 
 ## Setup
 
-1. Activate API module: Fiken → Innstillinger → Moduler → Fiken API (99 NOK/month) — activate for **each** company
-2. Generate Personal API Token: Rediger konto → API → Personlige API-nøkler → Ny nøkkel (one token covers all companies you have access to)
-3. Set env var: `export FIKEN_API_TOKEN="your-token-here"`
-4. Discover company slugs:
+1. Activate API module per foretak: Foretak → Tilleggstjenester → API-modul (99 kr/mnd) — must be activated for **each** company you want API access to. Without this, the token returns empty/403 for that foretak.
+2. **Enable developer mode on your user** (easy to miss — the API menu entry is hidden until you do this): Rediger konto → Profil → Andre innstillinger → tick the "developer" / "utvikler" checkbox. This is a per-user flag, not per-foretak. Source: api.fiken.no/api/v2/docs/ introduction.
+3. Generate Personal API Token: Rediger konto → API → Personlige API-nøkler → Ny nøkkel. Tokens never expire; one token covers all companies the user has permissions for. Note: "Rediger konto" is the **personal account** menu (top-right profile icon), NOT company settings under Foretak — users often look in the wrong place.
+4. Set env var: `export FIKEN_API_TOKEN="***"` (or drop into `~/.hermes/.env` and restart the gateway)
+5. Discover company slugs:
    ```bash
    curl -s https://api.fiken.no/api/v2/companies \
      -H "Authorization: Bearer $FIKEN_API_TOKEN" | jq '.[] | {name, slug}'
